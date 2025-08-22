@@ -1,0 +1,5 @@
+{
+  "name": "PokeProZ1",
+  "description": "An advanced Pokémon analysis tool that uses the PokeAPI to fetch official data and the Gemini API to generate in-depth, creative analyses of any Pokémon's biology, habitat, behavior, and combat strategies.",
+  "requestFramePermissions": []
+}
