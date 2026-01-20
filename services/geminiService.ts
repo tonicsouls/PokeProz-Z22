@@ -20,7 +20,7 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-const buildAnalysisPrompt = (pokemon: AnalysisPokemon): string => {  
+const buildAnalysisPrompt = (pokemon: AnalysisPokemon): string => {
   return `
 You are a world-class Pokémon professor, known for your creative and insightful analyses.
 Based on the following data for "${pokemon.name}", provide a professional analysis.
@@ -52,12 +52,12 @@ const buildTeamConfigurationPrompt = (team: BattlePokemon[], isCounterTeam: bool
     name: p.name,
     types: p.types,
     abilities: p.abilities,
-    baseStats: p.stats.reduce((acc, stat) => ({...acc, [stat.name.toLowerCase().replace('. ', '')]: stat.value}), {}),
+    baseStats: p.stats.reduce((acc, stat) => ({ ...acc, [stat.name.toLowerCase().replace('. ', '')]: stat.value }), {}),
     allMoves: p.moveList.map(m => m.name)
   }));
 
   const availableItems = BATTLE_ITEMS.map(item => item.name);
-  
+
   const counterInstructions = isCounterTeam && playerTeamForContext ? `
 **Counter-Strategy Objective:**
 Your primary goal is to configure this team to effectively counter the provided "Player's Team". Analyze the Player's Team for weaknesses (types, common strategies, defensive gaps) and exploit them with your move, item, and stat choices. For example, if the player's team is slow, prioritize fast attackers. If it's weak to a certain type, ensure your team has strong coverage of that type.
@@ -98,8 +98,8 @@ Now, generate the optimal configurations in the specified JSON format.
 
 const buildAiActionPrompt = (aiPokemon: BattlePokemon, playerPokemon: BattlePokemon, aiTeam: BattlePokemon[], aiLastAction: 'move' | 'switch' | null): string => {
   const aiTeamState = aiTeam.map(p => ({ name: p.name, hp: p.currentHp, status: p.status, types: p.types }));
-  
-  const switchConstraint = aiLastAction === 'switch' 
+
+  const switchConstraint = aiLastAction === 'switch'
     ? "**IMPORTANT RULE: Your last action was 'switch'. You are FORBIDDEN from choosing 'switch' again this turn. You MUST choose a move.**"
     : "";
 
@@ -145,7 +145,7 @@ async function* runStream(prompt: string, schema?: any) {
     const response = await ai.models.generateContentStream({
       model: "gemini-2.5-flash",
       contents: prompt,
-      ...(schema && { 
+      ...(schema && {
         config: {
           responseMimeType: "application/json",
           responseSchema: schema
@@ -168,97 +168,132 @@ export function generatePokemonAnalysisStream(pokemon: AnalysisPokemon) {
 }
 
 export function generateTeamSuggestionStream() {
-    const prompt = buildTeamSuggestionPrompt();
-    const schema = {
-        type: Type.ARRAY,
-        items: { type: Type.STRING }
-    };
-    return runStream(prompt, schema);
+  const prompt = buildTeamSuggestionPrompt();
+  const schema = {
+    type: Type.ARRAY,
+    items: { type: Type.STRING }
+  };
+  return runStream(prompt, schema);
+}
+
+const buildTeamAnalysisPrompt = (teamJson: string): string => {
+  return `
+You are an expert Pokémon battle strategist and team analyst. Analyze the following team and provide insights.
+
+**Team Data:**
+\`\`\`json
+${teamJson}
+\`\`\`
+
+**Your Analysis Must Include:**
+1. **strengths**: An array of 2-3 key strengths of this team (type coverage, synergy, etc.)
+2. **weaknesses**: An array of 2-3 vulnerabilities or gaps (shared weaknesses, lack of coverage, etc.)
+3. **suggestions**: An array of 2-3 actionable recommendations to improve the team
+4. **rating**: A number from 1-10 rating the team's competitive viability
+
+**Response Format:** Your response MUST be a valid JSON object with exactly these fields: strengths, weaknesses, suggestions, rating.
+Do not include any text outside the JSON object.
+`;
+};
+
+export function generateTeamAnalysisStream(teamJson: string) {
+  const prompt = buildTeamAnalysisPrompt(teamJson);
+  const schema = {
+    type: Type.OBJECT,
+    properties: {
+      strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+      weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
+      suggestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+      rating: { type: Type.NUMBER }
+    },
+    required: ["strengths", "weaknesses", "suggestions", "rating"]
+  };
+  return runStream(prompt, schema);
 }
 
 const getConfigSchema = () => {
-    const evSchema = {
-        type: Type.OBJECT,
-        properties: {
-            hp: { type: Type.NUMBER }, attack: { type: Type.NUMBER }, defense: { type: Type.NUMBER },
-            spAtk: { type: Type.NUMBER }, spDef: { type: Type.NUMBER }, speed: { type: Type.NUMBER }
-        },
-        required: ["hp", "attack", "defense", "spAtk", "spDef", "speed"]
-    };
-    const configSchema = {
-        type: Type.OBJECT,
-        properties: {
-            pokemonName: { type: Type.STRING },
-            moves: { type: Type.ARRAY, items: { type: Type.STRING } },
-            evs: evSchema,
-            nature: { type: Type.STRING },
-            item: { type: Type.STRING }
-        },
-        required: ["pokemonName", "moves", "evs", "nature", "item"]
-    };
-    return {
-        type: Type.OBJECT,
-        properties: {
-            configurations: {
-                type: Type.ARRAY,
-                items: configSchema
-            }
-        },
-        required: ["configurations"]
-    };
+  const evSchema = {
+    type: Type.OBJECT,
+    properties: {
+      hp: { type: Type.NUMBER }, attack: { type: Type.NUMBER }, defense: { type: Type.NUMBER },
+      spAtk: { type: Type.NUMBER }, spDef: { type: Type.NUMBER }, speed: { type: Type.NUMBER }
+    },
+    required: ["hp", "attack", "defense", "spAtk", "spDef", "speed"]
+  };
+  const configSchema = {
+    type: Type.OBJECT,
+    properties: {
+      pokemonName: { type: Type.STRING },
+      moves: { type: Type.ARRAY, items: { type: Type.STRING } },
+      evs: evSchema,
+      nature: { type: Type.STRING },
+      item: { type: Type.STRING }
+    },
+    required: ["pokemonName", "moves", "evs", "nature", "item"]
+  };
+  return {
+    type: Type.OBJECT,
+    properties: {
+      configurations: {
+        type: Type.ARRAY,
+        items: configSchema
+      }
+    },
+    required: ["configurations"]
+  };
 };
 
 export function generateConfigurationForTeamStream(team: BattlePokemon[]) {
-    const prompt = buildTeamConfigurationPrompt(team);
-    return runStream(prompt, getConfigSchema());
+  const prompt = buildTeamConfigurationPrompt(team);
+  return runStream(prompt, getConfigSchema());
 }
 
 export function generateCounterConfigurationForTeamStream(opponentTeam: BattlePokemon[], playerTeam: BattlePokemon[]) {
-    const prompt = buildTeamConfigurationPrompt(opponentTeam, true, playerTeam);
-    return runStream(prompt, getConfigSchema());
+  const prompt = buildTeamConfigurationPrompt(opponentTeam, true, playerTeam);
+  return runStream(prompt, getConfigSchema());
 }
 
 export const generateAiAction = async (aiPokemon: BattlePokemon, playerPokemon: BattlePokemon, aiTeam: BattlePokemon[], aiLastAction: 'move' | 'switch' | null): Promise<AiAction> => {
-    const prompt = buildAiActionPrompt(aiPokemon, playerPokemon, aiTeam, aiLastAction);
-    
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        action: { type: Type.STRING, enum: ["move", "switch"] },
-                        move: { type: Type.STRING, nullable: true },
-                        to: { type: Type.STRING, nullable: true },
-                    },
-                    required: ["action"]
-                }
-            }
-        });
+  const prompt = buildAiActionPrompt(aiPokemon, playerPokemon, aiTeam, aiLastAction);
 
-        const jsonText = response.text.trim();
-        const result = JSON.parse(jsonText);
-
-        // Basic validation
-        if (result.action === 'move' && result.move) {
-            return { action: 'move', move: result.move };
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            action: { type: Type.STRING, enum: ["move", "switch"] },
+            move: { type: Type.STRING, nullable: true },
+            to: { type: Type.STRING, nullable: true },
+          },
+          required: ["action"]
         }
-        if (result.action === 'switch' && result.to) {
-             // Second layer of defense against consecutive switches, just in case AI ignores prompt
-            if (aiLastAction === 'switch') {
-                console.warn("AI ignored instruction and tried to switch twice. Falling back to move.");
-                return { action: 'move', move: aiPokemon.selectedMoves[0].name };
-            }
-            return { action: 'switch', to: result.to };
-        }
-        throw new Error("AI returned an incomplete action.");
+      }
+    });
 
-    } catch (e) {
-        console.error("Error processing AI action:", e);
-        // Fallback to a simple action if AI fails
-        return { action: 'move', move: aiPokemon.selectedMoves[0].name };
+    const jsonText = response.text.trim();
+    const result = JSON.parse(jsonText);
+
+    // Basic validation
+    if (result.action === 'move' && result.move) {
+      return { action: 'move', move: result.move };
     }
+    if (result.action === 'switch' && result.to) {
+      // Second layer of defense against consecutive switches, just in case AI ignores prompt
+      if (aiLastAction === 'switch') {
+        console.warn("AI ignored instruction and tried to switch twice. Falling back to move.");
+        return { action: 'move', move: aiPokemon.selectedMoves[0].name };
+      }
+      return { action: 'switch', to: result.to };
+    }
+    throw new Error("AI returned an incomplete action.");
+
+  } catch (e) {
+    console.error("Error processing AI action:", e);
+    // Fallback to a simple action if AI fails
+    return { action: 'move', move: aiPokemon.selectedMoves[0].name };
+  }
 };

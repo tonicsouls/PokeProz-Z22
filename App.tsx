@@ -3,7 +3,10 @@ import { MainMenu } from './components/MainMenu';
 import { PokedexView } from './views/PokedexView';
 import { BattleArenaView } from './views/BattleArenaView';
 import { LoadingSpinner } from './components/LoadingSpinner';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { AchievementToast } from './components/AchievementToast';
 import { fetchAllPokemonList } from './services/pokeapi';
+import { useEngagement } from './hooks/useEngagement';
 import { PokemonListItem } from './types';
 
 type View = 'menu' | 'pokedex' | 'battle';
@@ -20,18 +23,19 @@ const ApiErrorMessage: React.FC<{ message: string; onClose: () => void }> = ({ m
 );
 
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<View>('menu');
   const [allPokemon, setAllPokemon] = useState<PokemonListItem[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  const { pendingAchievement, dismissAchievement } = useEngagement();
 
   const handleApiError = (message: string) => {
     // A simplified error message parser
     if (message.includes('quota exceeded')) {
-        setApiError('You have reached the daily limit of requests for this model. Please use the "Engine Battle" option or try again tomorrow.');
+      setApiError('You have reached the daily limit of requests for this model. Please use the "Engine Battle" option or try again tomorrow.');
     } else {
-        setApiError(message);
+      setApiError(message);
     }
   };
 
@@ -74,8 +78,24 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 font-sans antialiased">
       {apiError && <ApiErrorMessage message={apiError} onClose={() => setApiError(null)} />}
+      {pendingAchievement && (
+        <AchievementToast
+          title={pendingAchievement.title}
+          description={pendingAchievement.description}
+          icon={pendingAchievement.icon}
+          onClose={dismissAchievement}
+        />
+      )}
       {renderContent()}
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 };
 
